@@ -60,6 +60,8 @@ svc-alfresco has this misconfiguration: "Dont require Kerberos preauthentication
 
 <img width="1723" height="817" alt="image" src="https://github.com/user-attachments/assets/0d19fe97-3946-47ec-98fd-3cab7c9c0022" />
 
-## Foothold
+## PrivilegeEscalation
+
+
 
 
