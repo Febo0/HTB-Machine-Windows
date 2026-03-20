@@ -51,3 +51,15 @@ rpcclient is a tool for interacting with the Windows RPC (Remote Procedure Call)
 ## Exploitation
 
 ### AS-REP Roasting
+
+`GetNPUsers.py htb.local/ -usersfile users.txt -format hashcat -dc-ip 10.129.95.210 `
+
+<img width="1897" height="620" alt="image" src="https://github.com/user-attachments/assets/4d7de1b0-a8b6-4dd1-8ce4-21c7d444ee3f" />
+
+svc-alfresco has this misconfiguration: "Dont require Kerberos preauthentication". If a user has this option checked, we can request their initial Kerberos ticket (AS-REP) from the server without needing to know theis password. The ticket contains a portion encrypted with the user's password, which we can attempt to crack offline. 
+
+<img width="1723" height="817" alt="image" src="https://github.com/user-attachments/assets/0d19fe97-3946-47ec-98fd-3cab7c9c0022" />
+
+## Foothold
+
+
