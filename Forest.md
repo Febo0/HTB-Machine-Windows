@@ -1,4 +1,4 @@
-# NameMachine — Forest
+# Forest
 
 **Difficoltà:** Easy
 **OS:** Windows
