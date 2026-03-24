@@ -58,12 +58,32 @@ There are no interesting shares, so let's proceed to map the domain using Bloodh
 
 <img width="1439" height="767" alt="image" src="https://github.com/user-attachments/assets/5d1a18d9-e003-4986-90a4-b1668607bc10" />
 
-If we experiment a bit with BloodHound and dont get any results, manually entered query in these situations.
+If we experiment a bit with BloodHound and dont get any results, manually entered query in these situations. This qury shows us all direct permissions that users and computers have on other domain objects.
 
 `MATCH p=(source)-[r]->(target)
 WHERE (source:Computer or source:user)
+AND type(r)<> 'MemberOf'
 return p`
-``
+
+<img width="1397" height="405" alt="image" src="https://github.com/user-attachments/assets/075d3c45-cf2b-44bf-972b-135e37a10164" />
+
+The key point we can see are: 1)IT-Computer 3 has the "AddSelf" permission for the HelpDesk group. 2)IT-Computer 3 was created on December 26, and its password was changed on December 27. Computer objects dont work that way, the password changes every 30 day. Now let's take a look at the HelDesk group.
+
+<img width="1250" height="621" alt="image" src="https://github.com/user-attachments/assets/4fd1bb93-98c7-4e56-ab59-ef7e1b42eaec" />
+
+By doing lateral movment, we can find some users who connect via winrm.
+
+<img width="1769" height="454" alt="image" src="https://github.com/user-attachments/assets/4e681800-f17d-4203-bc7e-bd1382d8c218" />
+
+First, we need to take control of the machine account. There are two methods: if it is configured with "legacy" authentication (pre-Windows2000), the password may be the same as the computer name. Review the account history to identify human errors (in our case, the password was changed by an administrator, so it will be weak).
+
+## Time Roasting Attack
+This attack sends a malformed NTP (Network Time Protocol) request to the domain controller on behalf of the computer account. The server responds with timestamp is encrypted using the account's NTLM hash. 
+
+`nxc smb 10.129.232.127 -M timeroast`
+
+<img width="1596" height="322" alt="image" src="https://github.com/user-attachments/assets/596dbb93-3b8e-4ae8-9bc4-5c2e1ad272c6" />
+
 ``
 ``
 ``
