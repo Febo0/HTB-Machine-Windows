@@ -48,11 +48,21 @@ Now let's finally see if the credentials provided are valid in the domain using 
 
 <img width="938" height="95" alt="image" src="https://github.com/user-attachments/assets/c9c43de7-5ada-438f-8e97-88fe5a5a86e7" />
 
+Let's list the SMB shares that are accessible to Parker to understand his access level in the domain. 
 
+`nxc smb 10.129.232.127 -u rr.parker -p '8#t5HE8L!W3A' -k  --shares`
 
-``
+<img width="940" height="209" alt="image" src="https://github.com/user-attachments/assets/5a0d9e45-3bd7-475d-96ac-e342eef2ac94" />
 
-``
+There are no interesting shares, so let's proceed to map the domain using Bloodhound. First, let's all the data that Parker might request using RustHound. 
+
+<img width="1439" height="767" alt="image" src="https://github.com/user-attachments/assets/5d1a18d9-e003-4986-90a4-b1668607bc10" />
+
+If we experiment a bit with BloodHound and dont get any results, manually entered query in these situations.
+
+`MATCH p=(source)-[r]->(target)
+WHERE (source:Computer or source:user)
+return p`
 ``
 ``
 ``
