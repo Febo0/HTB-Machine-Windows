@@ -1,31 +1,35 @@
-# Rustykey
+# HackTheBox Writeup: Rustykey
 
 **Difficoltà:** Hard
 **OS:** Windows
 **Date:** 21/03/2026
 
-## Pre-Engagement 
+## 1. Information Gathering & Reconnaissance
 IP target: 10.129.232.127
 Credentials: rr.parker:8#t5HE8L!W3A
 
-## Scanning & Enumeration
+### Port Scanning
+We begin by mapping the open ports and services on the target using Nmap:
 
 `nmap -sCV -vv -oA nmap/rustykey 10.129.232.127`
 
 <img width="1236" height="699" alt="image" src="https://github.com/user-attachments/assets/6493c81a-e533-45f9-891e-18b5f2a3354a" />
 
-Ports 80 and 443 are not open(no web server). The standard ports for a domain controller are detected: DNS(53), RPC(135), LDAP(389,3268), SMB(445), and WinRM(5985). 
-So let's proceed by listing these services/ports.
+Ports 80 and 443 are closed, meaning there is no web server hosted here. However, standard Active Directory/Domain Controller ports are open: DNS (53), RPC (135), LDAP (389, 3268), SMB (445), and WinRM (5985). We will proceed by enumerating these specific services.
 
-## clock synchronization
+### Clock Synchronization (Kerberos Requirement)
 
-Kerberos includes a timestamp-based anti-replay mechanism: each ticket (TGT,TGS) contains the time at which it was generated. When the KDC receives a request, it compares the ticket's timestamp with its own clock. If the difference exceeds 5 minutes, the DC rejects the ticket with an error (KRB_AP_ERR_SKEW - Clock skew too great).
+Kerberos includes a timestamp-based anti-replay mechanism: each ticket (TGT, TGS) contains the generation time. When the Key Distribution Center (KDC) receives a request, it compares the ticket's timestamp with its own internal clock. If the difference exceeds 5 minutes, the Domain Controller rejects the ticket with a `KRB_AP_ERR_SKEW` error. 
+
+To ensure our attacks work correctly, we sync our local clock with the DC:
 
 `sudo ntpdate 10.129.232.127`
 
 <img width="716" height="37" alt="image" src="https://github.com/user-attachments/assets/262e2512-6275-411d-bdbe-0a0a51f542ca" />
 
-### SMB Enumeration
+## 2. Enumeration & Initial Access
+
+We attempt to validate our provided credentials over SMB using NetExec (nxc):
 
 `nxc smb 10.129.232.127 -u r.parker -p '8#t5HE8L!W3A'`
 
