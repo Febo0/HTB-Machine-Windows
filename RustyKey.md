@@ -71,10 +71,12 @@ return p`
 
 <img width="1397" height="405" alt="image" src="https://github.com/user-attachments/assets/075d3c45-cf2b-44bf-972b-135e37a10164" />
 
-The key point we can see are: 1)IT-Computer 3 has the "AddSelf" permission for the HelpDesk group. 2)IT-Computer 3 was created on December 26, and its password was changed on December 27. Computer objects dont work that way, the password changes every 30 day. Now let's take a look at the HelDesk group.
+The key point we can see are: 1)'IT-COMPUTER3$' has the 'AddSelf' permission over the 'HelpDesk' group. 2)'IT-COMPUTER3$' was created on December 26, and its password was changed on December 27. Typically, machine account passwords rotate every 30 days automatically. A manual change suggests human intervention, making it a target for brute-forcing or weakness exploitation.
 
 <img width="1250" height="621" alt="image" src="https://github.com/user-attachments/assets/4fd1bb93-98c7-4e56-ab59-ef7e1b42eaec" />
 
+## 3. Lateral Movement & Privilege Escalation
+### Time Roasting Attack
 By doing lateral movment, we can find some users who connect via winrm.
 
 <img width="1769" height="454" alt="image" src="https://github.com/user-attachments/assets/4e681800-f17d-4203-bc7e-bd1382d8c218" />
