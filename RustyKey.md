@@ -112,11 +112,27 @@ Now we can request TGT ticket for Morgan.
 
 `impacket-getTGT rustykey.htb/bb.morgan:'GiorginaDellaGarbatella!' -dc-ip 10.129.232.127`
 
+When we access the system via WinRM, we find a PDF file. The keywords in it are "extraction/compression", which clearly indicates software for managing archives (zip, rar). Windwows uses COM objects to allow different programs to share functionality. For example, when you  right-click and select “Extract”, wndows doesn't natively know how to unzip it. Instead, it consults the Registry by looking for a unique code called CLSID. The CLSID tells it: "To openthis file, load this specific DLL". So, if we can identify which CLSID is used for zip file and have the permissions to modify uts value in the registry, we can replace the path to the legitimate DLL with that of a malicius DLL.
 
+<img width="752" height="372" alt="image" src="https://github.com/user-attachments/assets/3b70c224-a49e-4093-8420-3c71fa818ebc" />
 
+Now we need to find the exact CLSID associated with 7-Zip in the Windows Registry.
 
-``
-``
+`reg query HKCR\CLSID /s /f "zip"`
+
+<img width="629" height="55" alt="image" src="https://github.com/user-attachments/assets/50ad7c0a-98db-43cc-a543-3447cc14f54d" />
+
+Now that we have found the registry key, we need to figure out who has permission to edit it.
+
+`C:\Program Files> Get-Acl -Path "HKLM:\SOFTWARE\Classes\CLSID\{23170F69-40C1-278A-1000-000100020000}" | Format-List`
+
+<img width="1333" height="241" alt="image" src="https://github.com/user-attachments/assets/4d3c0d62-f5b1-47cb-9f4b-42c2d98e7c1b" />
+
+We find that the Support group has full control; the user morgan is not a meber of this group, so they cannot modify the key. Let's check the group members on Bloodhound
+
+<img width="919" height="253" alt="image" src="https://github.com/user-attachments/assets/96a30e2c-4b58-4e33-ad55-2970d945f932" />
+
+Now we need to take control of EE.REED.
 ``
 ``
 ``
