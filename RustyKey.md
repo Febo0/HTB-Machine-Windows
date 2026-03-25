@@ -60,7 +60,9 @@ Let's list the SMB shares that are accessible to Parker to understand his access
 We don't find any immediately exploitable or interesting SMB shares. To understand Parker's access level in the domain, we need to map the Active Directory environment.
 <img width="1439" height="767" alt="image" src="https://github.com/user-attachments/assets/5d1a18d9-e003-4986-90a4-b1668607bc10" />
 
-If we experiment a bit with BloodHound and dont get any results, manually entered query in these situations. This qury shows us all direct permissions that users and computers have on other domain objects.
+### Active Directory Enumeration (BloodHound)
+
+When standard queries don't yield obvious paths, writing custom Cypher queries is essential. The following query helps identify direct permissions that users and computers have over other domain objects:
 
 `MATCH p=(source)-[r]->(target)
 WHERE (source:Computer or source:user)
@@ -70,6 +72,9 @@ return p`
 <img width="1397" height="405" alt="image" src="https://github.com/user-attachments/assets/075d3c45-cf2b-44bf-972b-135e37a10164" />
 
 The key point we can see are: 1)IT-Computer 3 has the "AddSelf" permission for the HelpDesk group. 2)IT-Computer 3 was created on December 26, and its password was changed on December 27. Computer objects dont work that way, the password changes every 30 day. Now let's take a look at the HelDesk group.
+
+## 3. Lateral Movement & Privilege Escalation
+### Time Roasting Attack
 
 <img width="1250" height="621" alt="image" src="https://github.com/user-attachments/assets/4fd1bb93-98c7-4e56-ab59-ef7e1b42eaec" />
 
