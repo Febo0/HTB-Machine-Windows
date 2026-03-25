@@ -28,15 +28,15 @@ To ensure our attacks work correctly, we sync our local clock with the DC:
 <img width="716" height="37" alt="image" src="https://github.com/user-attachments/assets/262e2512-6275-411d-bdbe-0a0a51f542ca" />
 
 ## 2. Enumeration & Initial Access
-
+### SMB & Authentication Mechanisms
 We attempt to validate our provided credentials over SMB using NetExec (nxc):
 
 `nxc smb 10.129.232.127 -u r.parker -p '8#t5HE8L!W3A'`
 
-This error inidcates thet NTLM authentication is disabled. So, we need to find another way to "comunicate" with Kerberos. Another important security note is that "signing:True" is set, so NTLM Relay is not possible.
+The output indicates that **NTLM authentication is disabled**. Therefore, we must rely entirely on Kerberos for authentication. Additionally, SMB signing is set to `True`, which mitigates any potential NTLM Relay attacks.
 <img width="930" height="79" alt="image" src="https://github.com/user-attachments/assets/769997ef-1e4f-46f9-b700-093052548041" />
 
-Kerberos doesen't work magically, our linux system needs to know where to go to obtain tickets. This information is configured via a standard Linux file caled "kerb5.conf". By default, linux looks for the kerberos configuration in "/etc/krb5.conf". With this environment variable, you are telling all Kerberos tools on the system " dont use the system configuration, use this specific file for this HTB box".
+To interact with Kerberos properly, our Linux system needs to know how to reach the realm. We can generate a custom Kerberos configuration file (`krb5.conf`) and export it to our environment:
 
 `nxc smb 10.129.232.127 --generate-krb5-file rustykey.krb`
 
@@ -46,8 +46,7 @@ Kerberos doesen't work magically, our linux system needs to know where to go to 
 
 <img width="333" height="38" alt="image" src="https://github.com/user-attachments/assets/dc0ba6dc-c5ea-4c07-9efc-4acf98f32470" />
 
-Now let's finally see if the credentials provided are valid in the domain using Kerberos authentication.
-
+Now, we can verify if our credentials are valid using Kerberos authentication (`-k` flag):
 `nxc smb 10.129.232.127 -u r.parker -p '8#t5HE8L!W3A' -k`
 
 <img width="938" height="95" alt="image" src="https://github.com/user-attachments/assets/c9c43de7-5ada-438f-8e97-88fe5a5a86e7" />
@@ -58,8 +57,7 @@ Let's list the SMB shares that are accessible to Parker to understand his access
 
 <img width="940" height="209" alt="image" src="https://github.com/user-attachments/assets/5a0d9e45-3bd7-475d-96ac-e342eef2ac94" />
 
-There are no interesting shares, so let's proceed to map the domain using Bloodhound. First, let's all the data that Parker might request using RustHound. 
-
+We don't find any immediately exploitable or interesting SMB shares. To understand Parker's access level in the domain, we need to map the Active Directory environment.
 <img width="1439" height="767" alt="image" src="https://github.com/user-attachments/assets/5d1a18d9-e003-4986-90a4-b1668607bc10" />
 
 If we experiment a bit with BloodHound and dont get any results, manually entered query in these situations. This qury shows us all direct permissions that users and computers have on other domain objects.
