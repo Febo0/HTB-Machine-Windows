@@ -73,9 +73,6 @@ return p`
 
 The key point we can see are: 1)IT-Computer 3 has the "AddSelf" permission for the HelpDesk group. 2)IT-Computer 3 was created on December 26, and its password was changed on December 27. Computer objects dont work that way, the password changes every 30 day. Now let's take a look at the HelDesk group.
 
-## 3. Lateral Movement & Privilege Escalation
-### Time Roasting Attack
-
 <img width="1250" height="621" alt="image" src="https://github.com/user-attachments/assets/4fd1bb93-98c7-4e56-ab59-ef7e1b42eaec" />
 
 By doing lateral movment, we can find some users who connect via winrm.
