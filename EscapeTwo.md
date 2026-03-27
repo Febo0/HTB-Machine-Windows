@@ -168,8 +168,3 @@ Finally, we use the obtained administrator.pfx certificate to authenticate via P
 ``
 ``
 ``
-``
-``
-``
-``
-``
