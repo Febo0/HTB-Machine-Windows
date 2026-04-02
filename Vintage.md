@@ -62,24 +62,36 @@ But the most important thing is this service account: **gMSA01$**
 
 <img width="737" height="216" alt="image" src="https://github.com/user-attachments/assets/a82ea4ba-4da0-4908-be34-bffcc1a15625" />
 
-We can see that the DOMAIN COMPUTERS group can read the password for GMSA01, and FS01 is a member of this group. 
+## 3. Exploitation & Lateral Movement
 
-<img width="782" height="115" alt="image" src="https://github.com/user-attachments/assets/4ab6d1f2-8f06-4025-a7ac-e4f2b42348e4" />
+### 3.1 Pre-Windows 2000 Compatible Access Vulnerability
 
-We can see that FS01 is part of the “PRE-WINDOWS 2000 COMPATIBLEACCESS@VINTAGE.HTB” group. When a computer is part of this group, it means that its password matches the computer's name, but in all lowercase letters.
+During our BloodHound analysis, we identified a Group Managed Service Account named **gMSA01$**.
+
+We discovered that the **DOMAIN COMPUTERS** group has **ReadGMSAPassword** rights over this account. Further inspection revealed that the machine account **FS01$** is a member of the **Pre-Windows 2000 Compatible Access group**.
+
+**Vulnerability Insight:** Due to a legacy Active Directory configuration, when a computer account is pre-created and placed in the "Pre-Windows 2000 Compatible Access" group, its default password is automatically set to the computer's name in lowercase. **(Reference: TrustedSec - Diving into Pre-created Computer Accounts)**.
 
 `https://www.trustedsec.com/blog/diving-into-pre-created-computer-accounts`
 
+<img width="782" height="115" alt="image" src="https://github.com/user-attachments/assets/4ab6d1f2-8f06-4025-a7ac-e4f2b42348e4" />
+
+We successfully authenticated as the machine account using this logic:
+
 `nxc smb dc01.vintage.htb -k -u 'fs01$' -p fs01`
+
 <img width="1107" height="57" alt="image" src="https://github.com/user-attachments/assets/bac1b3ce-b994-4d47-a683-c8cef15ad9b3" />
+
+### 3.2 GMSA Hash Extraction
 
 `nxc ldap dc01.vintage.htb -k -u 'fs01$' -p fs01 --gmsa`
 
-This is how we obtain the NTLM hash of the password
+### 3.3 Targeted Kerberoasting
+BloodHound indicated that **gMSA01$** has the right to add itself to the **ServiceManagers** group. We executed this action using the newly acquired NTLM hash:
 
 ` bloodyAD -d vintage.htb -u 'gmsa01$' -p '0851299c01b944d01099fc977eaa6c67' -f rc4 --host dc01.vintage.htb -k add groupMember ServiceManagers 'gmsa01$' `
 
-We have added gmsa01 to the servicemanagers group. A classic Kerberoasting attack (used to obtain a service's hash) only works if the target account has a Service Principal Name (SPN) configured. The service accounts we identified do not have a default SPN. However, since GMSA has GenericAll permissions on those accounts, it has the right to create a dummy SPN for those accounts, perform Kerberoasting, and then delete the SPN to leave no trace. This is called Targeted Kerberoasting.
+The **ServiceManagers** group possesses The ServiceManagers group possesses GenericAll (full control) over three service accounts (**svc_sql**, **svc_ark**, **svc_ldap**). Although these accounts did not natively have a Service Principal Name (SPN)—making them immune to standard Kerberoasting—our **GenericAll** permissions allowed us to perform a Targeted Kerberoasting attack. This technique involves manually assigning a dummy SPN to the accounts, requesting the Kerberos TGS ticket (which contains the crackable password hash), and subsequently removing the SPN. (full control) over three service accounts (svc_sql, svc_ark, svc_ldap). Although these accounts did not natively have a ServicePrincipalName (SPN) making them immune to standard Kerberoasting our GenericAll permissions allowed us to perform a Targeted Kerberoasting attack. This technique involves manually assigning a dummy SPN to the accounts, requesting the Kerberos TGS ticket (which contains the crackable password hash), and subsequently removing the SPN.
 
 <img width="1114" height="398" alt="image" src="https://github.com/user-attachments/assets/850cfa72-184c-4eba-964d-53f24764b3e5" />
 
