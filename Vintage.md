@@ -58,7 +58,7 @@ Instead of generating noisy queries against the Domain Controller, we analyzed t
 <img width="1217" height="273" alt="image" src="https://github.com/user-attachments/assets/ca01f6a4-1958-4052-9866-c221527a7191" />
 
 The output revealed that multiple users and service accounts had their passwords set at the exact same millisecond. This strongly indicates the use of an automated provisioning script, which often assigns identical default passwords to bulk-created accounts, presenting a high risk of password reuse.
-We see that some users changed their passwords at the exact same time; this could indicate that they are using the same password. but the most important thing is this service account: **gMSA01$** 
+But the most important thing is this service account: **gMSA01$** 
 
 <img width="737" height="216" alt="image" src="https://github.com/user-attachments/assets/a82ea4ba-4da0-4908-be34-bffcc1a15625" />
 
