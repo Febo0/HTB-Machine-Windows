@@ -11,9 +11,8 @@ Credentials: P.Rosa:Rosaisbest123
 ### 1.1 Port Scanning
 
 The assessment began with a comprehensive network port scan using Nmap to identify exposed services and map the target's attack surface. We utilized the **-sC** flag for default enumeration scripts and **-sV** for service version detection.
-`
-sudo nmap -sC -sV -oA nmap/vintage 10.129.231.205   
-`
+
+```sudo nmap -sC -sV -oA nmap/vintage 10.129.231.205```
 
 <img width="1003" height="533" alt="image" src="https://github.com/user-attachments/assets/1982cffe-79f1-42c9-9fd7-2d94eb9f506c" />
 
@@ -25,33 +24,40 @@ The scan revealed a standard Active Directory environment (DNS, Kerberos, SMB, L
 
 Initial attempts to authenticate using the provided credentials via standard NTLM protocols failed. It was determined that **NTLM authentication is completely disabled** on this domain. Consequently, all authentication attempts had to be routed through Kerberos.
 Kerberos is highly sensitive to hostname resolution, therefore, we targeted the Fully Qualified Domain Name (FQDN) rather than the IP address, passing the **-k** flag to NetExec (NXC) to force Kerberos authentication.
-`
-nxc smb dc01.vintage.htb -u P.Rosa -p 'Rosaisbest123' -k
-`
+
+```nxc smb dc01.vintage.htb -u P.Rosa -p 'Rosaisbest123' -k```
 
 <img width="1116" height="65" alt="image" src="https://github.com/user-attachments/assets/23c4cd69-4928-4dce-83f3-82080d60206a" />
 
 We then verified our access and enumerated domain users:
 
-`nxc smb dc01.vintage.htb -u P.Rosa -p 'Rosaisbest123'  -k --users `
+```nxc smb dc01.vintage.htb -u P.Rosa -p 'Rosaisbest123'  -k --users ```
 
 <img width="1356" height="317" alt="image" src="https://github.com/user-attachments/assets/79c4a9f1-7b8e-4c4a-bcbb-ac1160c57fd4" />
 
 ### 2.2 Active Directory ACL Enumeration (BloodHound)
 
-Using Bloodhound, we can see that the two users, L. Bianchi and C. Neri, can be added to the DELEGATEDADMINS group. 
+To silently map the domain's permission architecture, we ingested the Active Directory data into BloodHound.
+Analysis of the attack paths revealed a potential Resource-Based Constrained Delegation (RBCD) vector. Specifically, users like **L. Bianchi** and ** C.Neri** hold the right to add themselves to the **DELEGATEDADMINS** group.
+This group is critical because it holds the **AllowedToAct** privilege over the Domain Controller (**DC01**), which could eventually allow for domain compromise.
+
+``` rusthound-ce -d vintage.htb -u P.Rosa -p 'Rosaisbest123' ```
+
 <img width="1206" height="356" alt="image" src="https://github.com/user-attachments/assets/01959115-fe53-4c44-ad18-c7d394680b7c" />
 
 They can then use the AllowedToAct privilege to become DC administrators.
 <img width="971" height="347" alt="image" src="https://github.com/user-attachments/assets/f0e49c1f-013b-4c36-9a6c-58ce10823443" />
 
-Now, to better understand this, let's take a look at the users.json file
+### 2.3 Offline Password Trend Analysis
 
-`cat 20260402090810_vintage-htb_users.json | jq '.data[].Properties | select(.samaccountname) | "\(.pwdlastset):\(.samaccountname)"' -r | sort -n `
+Instead of generating noisy queries against the Domain Controller, we analyzed the raw JSON data dumped by BloodHound to identify potential password spraying targets. Using jq, we correlated user accounts with their **pwdlastset** (Last Password Set) timestamp:
+
+```cat 20260402090810_vintage-htb_users.json | jq '.data[].Properties | select(.samaccountname) | "\(.pwdlastset):\(.samaccountname)"' -r | sort -n ```
 
 
 <img width="1217" height="273" alt="image" src="https://github.com/user-attachments/assets/ca01f6a4-1958-4052-9866-c221527a7191" />
 
+The output revealed that multiple users and service accounts had their passwords set at the exact same millisecond. This strongly indicates the use of an automated provisioning script, which often assigns identical default passwords to bulk-created accounts, presenting a high risk of password reuse.
 We see that some users changed their passwords at the exact same time; this could indicate that they are using the same password. but the most important thing is this service account: **gMSA01$** 
 
 <img width="737" height="216" alt="image" src="https://github.com/user-attachments/assets/a82ea4ba-4da0-4908-be34-bffcc1a15625" />
