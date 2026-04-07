@@ -1,0 +1,21 @@
+# HackTheBox Writeup: StreamIO
+
+**Difficoltà:** Medium
+**OS:** Windows
+**Date:** 07/04/2026
+
+## 1. Information Gathering & Reconnaissance
+IP target: 10.129.24.119
+
+### Port Scanning
+We begin by mapping the open ports and services on the target using Nmap:
+
+```
+sudo nmap -sC -sV -p- 10.129.24.119 -oA nmap/stream
+```
+
+
+
+Ports 80 and 443 are closed, meaning there is no web server hosted here. However, standard Active Directory/Domain Controller ports are open: DNS (53), RPC (135), LDAP (389, 3268), SMB (445), and WinRM (5985). We will proceed by enumerating these specific services.
+
+### Clock Synchronization (Kerberos Requirement)
