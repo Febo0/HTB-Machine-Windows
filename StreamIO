@@ -2,7 +2,7 @@
 
 **Difficoltà:** Easy
 **OS:** Windows
-**Date:** 07/04/2026
+**Date:** 09/04/2026
 
 ## 1. Enumeration
 IP target: 10.129.24.119
@@ -17,6 +17,10 @@ sudo nmap -sC -sV 10.129.231.186 -oA nmap/certified
 We see SMB (on port 445 ), LDAP (on port 389 ), and Kerberos (on port 88 ) are running. Hence, we can identify this as a Domain Controller. From the Nmap scan results, we see that the domain
 name is certified.htb , and the Domain Controller's DNS name is DC01.certified.htb . So, we add the domain name and DNS name to our /etc/hosts file.
 
-Using the provided credentials judith.mader:judith09 , we enumerate the Domain Controller
-using bloodhound:
+Using the provided credentials judith.mader:judith09 , we enumerate the Domain Controller using bloodhound:
+
+```
+rusthound-ce -d certified.htb -u judith.mader -p 'judith09'
+```
+
 
